@@ -1,0 +1,38 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: mongodb-festivos
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: festivos
+    volumes:
+      - mongo_data:/data/db
+      # Datos originales a inicializar (solo lectura)
+      - "./BD Mongo/BDFestivos.mjs:/init-src/BDFestivos.mjs:ro"
+      # Script que carga los datos en la BD festivos en el primer arranque
+      - "./docker/mongo-init/01-init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  apifestivos:
+    build: ./apifestivos
+    container_name: apifestivos
+    restart: unless-stopped
+    ports:
+      - "3030:3030"
+    environment:
+      BD_SERVIDOR: mongodb
+      BD_PUERTO: "27017"
+      BD_BASEDATOS: festivos
+    depends_on:
+      mongodb:
+        condition: service_healthy
+
+volumes:
+  mongo_data:
