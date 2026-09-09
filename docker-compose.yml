@@ -1,4 +1,5 @@
 services:
+
   mongodb:
     image: mongo:7
     container_name: mongodb-festivos
@@ -9,9 +10,7 @@ services:
       MONGO_INITDB_DATABASE: festivos
     volumes:
       - mongo_data:/data/db
-      # Datos originales a inicializar (solo lectura)
       - "./BD Mongo/BDFestivos.mjs:/init-src/BDFestivos.mjs:ro"
-      # Script que carga los datos en la BD festivos en el primer arranque
       - "./docker/mongo-init/01-init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro"
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
@@ -19,20 +18,70 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks:
+      - redcalendario
 
   apifestivos:
-    build: ./apifestivos
+    build:
+      context: ./apifestivos
+      dockerfile: Dockerfile
     container_name: apifestivos
     restart: unless-stopped
     ports:
       - "3030:3030"
     environment:
       BD_SERVIDOR: mongodb
-      BD_PUERTO: "27017"
+      BD_PUERTO: 27017
       BD_BASEDATOS: festivos
     depends_on:
       mongodb:
         condition: service_healthy
+    networks:
+      - redcalendario
+
+  postgres:
+    image: postgres:16
+    container_name: postgres-calendario
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: CalendarioLaboral
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: sa
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - "./docker/postgres-init/DDL - Calendario Laboral.sql:/docker-entrypoint-initdb.d/01-ddl.sql:ro"
+      - "./docker/postgres-init/DML - Calendario Laboral.sql:/docker-entrypoint-initdb.d/02-dml.sql:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d CalendarioLaboral"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - redcalendario
+
+  apicalendariolaboral:
+    build:
+      context: ./apicalendariolaboral
+      dockerfile: Dockerfile
+    container_name: apicalendariolaboral
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      apifestivos:
+        condition: service_started
+    networks:
+      - redcalendario
 
 volumes:
   mongo_data:
+  postgres_data:
+
+networks:
+  redcalendario:
+    name: redcalendario
